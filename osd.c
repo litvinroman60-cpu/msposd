@@ -2481,9 +2481,16 @@ static void draw_screenBMP2(bool OnlyAHI) {
 					u_int16_t d_y = y * current_display_info.font_height;
 					BITMAP fnt = bitmapFnt;
 
-					if (matrix_size > 10 && bmpFntSmall.u32Width > 0 && try_smaller_font || y == 0)
+					if ((matrix_size > 10 && bmpFntSmall.u32Width > 0 && try_smaller_font) || y == 0)
 						Convert2SmallGlyph(
 							&fnt, &s_left, &s_top, &s_width, &s_height, &d_x, &d_y, x, y, c, page);
+
+					// Never pass an invalid glyph rectangle to the bitmap copier.
+					// Some Betaflight DisplayPort codes address pages/rows that are
+					// not present in a particular font atlas.
+					if (s_left > fnt.u32Width || s_width > fnt.u32Width - s_left ||
+						s_top > fnt.u32Height || s_height > fnt.u32Height - s_top)
+						continue;
 
 					if (y == 0) // If there is no symbol on first line, assume
 								// this is statisctics screen.

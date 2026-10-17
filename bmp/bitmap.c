@@ -1181,12 +1181,6 @@ void convertRGBAToI4(uint8_t *srcBitmap, uint32_t width, uint32_t height, uint8_
 			uint32_t srcIndex =
 				(u32Y * width + u32X) * 4; // Calculate the source index (4 bytes per pixel)
 
-			// Extract RGBA values
-			uint8_t r = srcBitmap[srcIndex + 0];
-			uint8_t g = srcBitmap[srcIndex + 1];
-			uint8_t b = srcBitmap[srcIndex + 2];
-			uint8_t a = srcBitmap[srcIndex + 3];
-
 			// Find the closest palette index for the RGBA color
 			// uint8_t paletteIndex = findClosestPaletteIndex8(r, g, b, a,
 			// paletteTable);

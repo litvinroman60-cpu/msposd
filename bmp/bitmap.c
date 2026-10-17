@@ -610,7 +610,9 @@ uint8_t findClosestPaletteIndex8(uint16_t color, MI_RGN_PaletteTable_t *paletteT
 	uint8_t g = ((color >> 5) & 0x1F) << 3;	 // Convert 5-bit to 8-bit
 	uint8_t b = (color & 0x1F) << 3;		 // Convert 5-bit to 8-bit
 
-	for (uint8_t i = 1; i < 18; ++i) { // only 16 searched
+	// I4 stores a 4-bit palette index (0..15). Index 15 is transparent.
+	// Searching entries 16/17 wraps their values when packed into I4.
+	for (uint8_t i = 1; i < 15; ++i) {
 
 		MI_RGN_PaletteElement_t *element = &paletteTable->astElement[i];
 		uint32_t distance =
@@ -1056,9 +1058,6 @@ void convertBitmap1555ToI4x86(uint16_t *srcBitmap, uint32_t width, uint32_t heig
 
 			if (paletteIndex == 0)	// Sigmastar reserver
 				paletteIndex = 8;	// black
-			if (paletteIndex == 17) // Transparent color
-				paletteIndex = 15;
-
 			// Calculate the destination byte and bit position
 			uint32_t destByteIndex = destOffset + x / 2;
 			if (x % 2 == 0) {
@@ -1172,7 +1171,7 @@ void setPixelI4(
 // elsewhere
 void convertRGBAToI4(uint8_t *srcBitmap, uint32_t width, uint32_t height, uint8_t *destBitmap,
 	MI_RGN_PaletteTable_t *paletteTable) {
-	unsigned char u8Value = 0;
+	uint8_t packedValue = 0;
 	int u32Stride = getRowStride(width, 4);
 
 	printf("I4 %d:%d Stride:%d\n", width, height, u32Stride);
@@ -1187,9 +1186,6 @@ void convertRGBAToI4(uint8_t *srcBitmap, uint32_t width, uint32_t height, uint8_
 			uint8_t g = srcBitmap[srcIndex + 1];
 			uint8_t b = srcBitmap[srcIndex + 2];
 			uint8_t a = srcBitmap[srcIndex + 3];
-
-			if (a != 0 && r > 0)
-				u8Value = 0;
 
 			// Find the closest palette index for the RGBA color
 			// uint8_t paletteIndex = findClosestPaletteIndex8(r, g, b, a,
@@ -1209,10 +1205,10 @@ void convertRGBAToI4(uint8_t *srcBitmap, uint32_t width, uint32_t height, uint8_
 	#else
 			if (u32X % 2 == 0) { // Other platforms (non-SigmaStar)
 	#endif
-				u8Value = (*(destBitmap + (u32Stride * u32Y) + u32X / 2) & 0x0F)
+				packedValue = (*(destBitmap + (u32Stride * u32Y) + u32X / 2) & 0x0F)
 	|
 	((paletteIndex & 0x0F) << 4);
-				*(destBitmap + (u32Stride * u32Y) + u32X / 2) = u8Value;
+				*(destBitmap + (u32Stride * u32Y) + u32X / 2) = packedValue;
 			} else {
 				u8Value = (*(destBitmap + (u32Stride * u32Y) + u32X / 2) & 0xF0)
 	| (paletteIndex & 0x0F);

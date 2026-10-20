@@ -636,17 +636,16 @@ uint8_t findClosestPaletteIndexRGBA(uint8_t *color, MI_RGN_PaletteTable_t *palet
 	uint8_t g = *(color + 1);
 	uint8_t b = *(color + 2);
 	uint8_t a = *(color + 3);
-	if (a < 64)	   // transparency treshold, was 128
-		return 15; // transparent
-	else if (r > 77)
-		bestIndex = 0;
-	else
-		bestIndex = 0;
+	if (a < 64)
+		return 15; // I4 index 15 is reserved for transparency.
 
-	if (a > 2 && a < 200)
-		a++;
-
-	for (uint8_t i = 1; i < 18; ++i) { // only 16 searched
+	/*
+	 * I4 pixels can encode only palette indices 0..15. Index 0 is reserved
+	 * by SigmaStar, and index 15 is transparent, so only 1..14 are valid
+	 * candidates for opaque colors. Returning 16 or 17 wraps when packed
+	 * into a nibble and produces unrelated colors on screen.
+	 */
+	for (uint8_t i = 1; i < 15; ++i) {
 		MI_RGN_PaletteElement_t *element = &paletteTable->astElement[i];
 		uint32_t distance =
 			colorDistance8(r, g, b, element->u8Red, element->u8Green, element->u8Blue);

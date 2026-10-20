@@ -579,9 +579,14 @@ uint8_t findClosestPaletteIndexBW(uint16_t color, MI_RGN_PaletteTable_t *palette
 	uint8_t g = ((color >> 5) & 0x1F) << 3;	 // Convert 5-bit to 8-bit
 	uint8_t b = (color & 0x1F) << 3;		 // Convert 5-bit to 8-bit
 
-	for (uint8_t i = 7; i < 18; ++i) { // only 5 searched W, Bl, 2xGrays , transp
-		if (i == 9)
-			i = 13;
+	/*
+	 * This converter feeds an I4 bitmap: only palette indices 0..15 can be
+	 * encoded, index 15 is transparent, and index 0 is reserved by SigmaStar.
+	 * Compare only the opaque grayscale/black/white entries used by this mode.
+	 */
+	static const uint8_t candidates[] = {7, 8, 12, 13, 14};
+	for (size_t n = 0; n < sizeof(candidates) / sizeof(candidates[0]); ++n) {
+		uint8_t i = candidates[n];
 		MI_RGN_PaletteElement_t *element = &paletteTable->astElement[i];
 		uint32_t distance =
 			colorDistance8(r, g, b, element->u8Red, element->u8Green, element->u8Blue);

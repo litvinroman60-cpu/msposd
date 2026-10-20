@@ -403,36 +403,54 @@ void *get_directBMP(int handle) {
 unsigned long set_bitmapEx(int handle, BITMAP *bitmap, int BitsPerPixel) {
 	int s32Ret = 0;
 #ifdef __SIGMASTAR__
-	int byteWidth = getRowStride(bitmap->u32Width, BitsPerPixel);
 	MI_RGN_CanvasInfo_t stCanvasInfo;
+	int byteWidth;
+
+	if (!bitmap || !bitmap->pData || bitmap->u32Width == 0 || bitmap->u32Height == 0 ||
+		(BitsPerPixel != 4 && BitsPerPixel != 8 && BitsPerPixel != 16 && BitsPerPixel != 32)) {
+		fprintf(stderr, "set_bitmapEx: invalid bitmap or pixel depth\n");
+		return 0;
+	}
+
+	byteWidth = getRowStride(bitmap->u32Width, BitsPerPixel);
 	memset(&stCanvasInfo, 0, sizeof(stCanvasInfo));
 	s32Ret = GetCanvas(handle, &stCanvasInfo);
-	printf("OSD Handle:%d GetCanvas:%d  CanvasStride: %d , BMP_Stride:%d "
-		   "BMP_Size: %d:%d , Canvas size : %d:%d\r\n",
-		handle, s32Ret, stCanvasInfo.u32Stride, byteWidth, bitmap->u32Width, bitmap->u32Height,
-		stCanvasInfo.stSize.u32Width, stCanvasInfo.stSize.u32Height);
+	if (s32Ret != 0 || !stCanvasInfo.virtAddr) {
+		fprintf(stderr, "set_bitmapEx: GetCanvas failed (%#x)\n", s32Ret);
+		return 0;
+	}
 
-	for (int i = 0; i < bitmap->u32Height; i++)
-		memcpy((void *)(stCanvasInfo.virtAddr + i * (stCanvasInfo.u32Stride)),
-			bitmap->pData + i * byteWidth, byteWidth);
+	if (byteWidth <= 0 || stCanvasInfo.u32Stride < (unsigned int)byteWidth ||
+		bitmap->u32Width > stCanvasInfo.stSize.u32Width ||
+		bitmap->u32Height > stCanvasInfo.stSize.u32Height) {
+		fprintf(stderr,
+			"set_bitmapEx: bitmap/canvas mismatch: row=%d canvasStride=%u "
+			"bitmap=%ux%u canvas=%ux%u\n",
+			byteWidth, stCanvasInfo.u32Stride, bitmap->u32Width, bitmap->u32Height,
+			stCanvasInfo.stSize.u32Width, stCanvasInfo.stSize.u32Height);
+		return 0;
+	}
 
-	// memcpy((void *)(stCanvasInfo.virtAddr) , bitmap->pData ,
-	// bitmap->u32Height
-	// * byteWidth);
+	for (uint32_t y = 0; y < bitmap->u32Height; ++y) {
+		memcpy((void *)(stCanvasInfo.virtAddr + y * stCanvasInfo.u32Stride),
+			bitmap->pData + y * (unsigned int)byteWidth, (size_t)byteWidth);
+	}
 
 	s32Ret = MI_RGN_UpdateCanvas(DEV handle);
-
+	if (s32Ret != MI_RGN_OK) {
+		fprintf(stderr, "set_bitmapEx: MI_RGN_UpdateCanvas failed (%#x)\n", s32Ret);
+		return 0;
+	}
 	if (verbose)
-		printf("MI_RGN_UpdateCanvas completed byteWidth:%d!\n", byteWidth);
+		printf("MI_RGN_UpdateCanvas completed rowBytes:%d canvasStride:%u\n",
+			byteWidth, stCanvasInfo.u32Stride);
 
-	// this will break, the pointer to memory is no longer valid!
-	// memset((void *)(stCanvasInfo.virtAddr),
-	// PIXEL_FORMAT_DEFAULT==PIXEL_FORMAT_I4 ? 0xFF : 0x00 , bitmap->u32Height *
-	// getRowStride(bitmap->u32Width , BitsPerPixel));
-
-	return stCanvasInfo.virtAddr;
+	return (unsigned long)stCanvasInfo.virtAddr;
 #else
-	return s32Ret;
+	(void)handle;
+	(void)bitmap;
+	(void)BitsPerPixel;
+	return (unsigned long)s32Ret;
 #endif
 }
 

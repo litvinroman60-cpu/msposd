@@ -77,6 +77,7 @@ int create_region(int *handle, int x, int y, int width, int height) {
 	stChn.s32ChnId = 0;
 	stChn.s32OutputPortId = 0;
 
+	memset(&stRegion, 0, sizeof(stRegion));
 	stRegion.eType = E_MI_RGN_TYPE_OSD;
 	stRegion.stOsdInitParam.stSize.u32Height = height;
 	stRegion.stOsdInitParam.stSize.u32Width = width;
@@ -126,7 +127,9 @@ int create_region(int *handle, int x, int y, int width, int height) {
 		if (stRegionCurrent.stOsdInitParam.stSize.u32Height !=
 				stRegion.stOsdInitParam.stSize.u32Height ||
 			stRegionCurrent.stOsdInitParam.stSize.u32Width !=
-				stRegion.stOsdInitParam.stSize.u32Width)
+				stRegion.stOsdInitParam.stSize.u32Width ||
+			stRegionCurrent.stOsdInitParam.ePixelFmt !=
+				stRegion.stOsdInitParam.ePixelFmt)
 #else
 		if (stRegionCurrent.unAttr.stOverlay.stSize.u32Height !=
 				stRegion.unAttr.stOverlay.stSize.u32Height ||
@@ -138,7 +141,20 @@ int create_region(int *handle, int x, int y, int width, int height) {
 				__LINE__);
 #ifdef __SIGMASTAR__
 			MI_RGN_DetachFromChn(DEV *handle, &stChn);
-			MI_RGN_Destroy(DEV *handle);
+#if __INFINITY6C__
+			/* This handle is attached to both SSC377D SCL output ports. */
+			stChn.s32ChnId = 1;
+			stChn.s32OutputPortId = 1;
+			MI_RGN_DetachFromChn(DEV *handle, &stChn);
+			stChn.s32ChnId = 0;
+			stChn.s32OutputPortId = 0;
+#endif
+			s32Ret = MI_RGN_Destroy(DEV *handle);
+			if (s32Ret) {
+				fprintf(stderr, "[%s:%d] RGN_Destroy before recreate failed with %#x!\\n",
+					__func__, __LINE__, s32Ret);
+				return -1;
+			}
 			s32Ret = MI_RGN_Create(DEV *handle, &stRegion);
 #else
 			HI_MPI_RGN_DetachFromChn(*handle, &stChn);

@@ -2962,17 +2962,23 @@ static void InitMSPHook() {
 	PIXEL_FORMAT_BitsPerPixel = 16;
 
 #ifdef __SIGMASTAR__
-	PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_I4; // I4 format, 4 bits per pixel
+	PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_I4; // Default indexed OSD for SigmaStar
 	PIXEL_FORMAT_BitsPerPixel = 4;
 
 #ifdef __INFINITY6C__
-	//if I4 is not supported ?? uncomment these for slower rendering
-	//PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_1555; // ARGB1555 format, 16 bits per pixel
-	//PIXEL_FORMAT_BitsPerPixel = 16;
-
-	//PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_I4; // PIXEL_FORMAT_I4 format, 4 bits per pixel
-	//PIXEL_FORMAT_BitsPerPixel = 4;
-#endif	
+	/*
+	 * SSC377D / Infinity6C shares the RGN engine with the running camera
+	 * pipeline. MI_RGN_Init() can report that RGN is already initialized,
+	 * in which case its I4 palette is not ours to replace. An I4 surface then
+	 * depends on an external palette and can render with wrong/unstable colors.
+	 *
+	 * Use ARGB1555 on Infinity6C to avoid the shared palette LUT completely.
+	 * This sacrifices per-pixel alpha gradients (ARGB1555 has 1-bit alpha),
+	 * but keeps glyph colors deterministic and transparent pixels transparent.
+	 */
+	PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_1555;
+	PIXEL_FORMAT_BitsPerPixel = 16;
+#endif
 
 #endif
 #if defined(_x86) || defined(__ROCKCHIP__)

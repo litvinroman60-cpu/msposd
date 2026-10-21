@@ -2481,9 +2481,16 @@ static void draw_screenBMP2(bool OnlyAHI) {
 					u_int16_t d_y = y * current_display_info.font_height;
 					BITMAP fnt = bitmapFnt;
 
-					if (matrix_size > 10 && bmpFntSmall.u32Width > 0 && try_smaller_font || y == 0)
+					if ((matrix_size > 10 && bmpFntSmall.u32Width > 0 && try_smaller_font) || y == 0)
 						Convert2SmallGlyph(
 							&fnt, &s_left, &s_top, &s_width, &s_height, &d_x, &d_y, x, y, c, page);
+
+					// Never pass an invalid glyph rectangle to the bitmap copier.
+					// Some Betaflight DisplayPort codes address pages/rows that are
+					// not present in a particular font atlas.
+					if (s_left > fnt.u32Width || s_width > fnt.u32Width - s_left ||
+						s_top > fnt.u32Height || s_height > fnt.u32Height - s_top)
+						continue;
 
 					if (y == 0) // If there is no symbol on first line, assume
 								// this is statisctics screen.
@@ -2955,17 +2962,23 @@ static void InitMSPHook() {
 	PIXEL_FORMAT_BitsPerPixel = 16;
 
 #ifdef __SIGMASTAR__
-	PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_I4; // I4 format, 4 bits per pixel
+	PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_I4; // Default indexed OSD for SigmaStar
 	PIXEL_FORMAT_BitsPerPixel = 4;
 
 #ifdef __INFINITY6C__
-	//if I4 is not supported ?? uncomment these for slower rendering
-	//PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_1555; // ARGB1555 format, 16 bits per pixel
-	//PIXEL_FORMAT_BitsPerPixel = 16;
-
-	//PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_I4; // PIXEL_FORMAT_I4 format, 4 bits per pixel
-	//PIXEL_FORMAT_BitsPerPixel = 4;
-#endif	
+	/*
+	 * SSC377D / Infinity6C shares the RGN engine with the running camera
+	 * pipeline. MI_RGN_Init() can report that RGN is already initialized,
+	 * in which case its I4 palette is not ours to replace. An I4 surface then
+	 * depends on an external palette and can render with wrong/unstable colors.
+	 *
+	 * Use ARGB1555 on Infinity6C to avoid the shared palette LUT completely.
+	 * This sacrifices per-pixel alpha gradients (ARGB1555 has 1-bit alpha),
+	 * but keeps glyph colors deterministic and transparent pixels transparent.
+	 */
+	PIXEL_FORMAT_DEFAULT = PIXEL_FORMAT_1555;
+	PIXEL_FORMAT_BitsPerPixel = 16;
+#endif
 
 #endif
 #if defined(_x86) || defined(__ROCKCHIP__)

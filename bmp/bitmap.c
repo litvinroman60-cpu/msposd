@@ -579,9 +579,14 @@ uint8_t findClosestPaletteIndexBW(uint16_t color, MI_RGN_PaletteTable_t *palette
 	uint8_t g = ((color >> 5) & 0x1F) << 3;	 // Convert 5-bit to 8-bit
 	uint8_t b = (color & 0x1F) << 3;		 // Convert 5-bit to 8-bit
 
-	for (uint8_t i = 7; i < 18; ++i) { // only 5 searched W, Bl, 2xGrays , transp
-		if (i == 9)
-			i = 13;
+	/*
+	 * This converter feeds an I4 bitmap: only palette indices 0..15 can be
+	 * encoded, index 15 is transparent, and index 0 is reserved by SigmaStar.
+	 * Compare only the opaque grayscale/black/white entries used by this mode.
+	 */
+	static const uint8_t candidates[] = {7, 8, 12, 13, 14};
+	for (size_t n = 0; n < sizeof(candidates) / sizeof(candidates[0]); ++n) {
+		uint8_t i = candidates[n];
 		MI_RGN_PaletteElement_t *element = &paletteTable->astElement[i];
 		uint32_t distance =
 			colorDistance8(r, g, b, element->u8Red, element->u8Green, element->u8Blue);
@@ -610,7 +615,9 @@ uint8_t findClosestPaletteIndex8(uint16_t color, MI_RGN_PaletteTable_t *paletteT
 	uint8_t g = ((color >> 5) & 0x1F) << 3;	 // Convert 5-bit to 8-bit
 	uint8_t b = (color & 0x1F) << 3;		 // Convert 5-bit to 8-bit
 
-	for (uint8_t i = 1; i < 18; ++i) { // only 16 searched
+	// I4 stores a 4-bit palette index (0..15). Index 15 is transparent.
+	// Searching entries 16/17 wraps their values when packed into I4.
+	for (uint8_t i = 1; i < 15; ++i) {
 
 		MI_RGN_PaletteElement_t *element = &paletteTable->astElement[i];
 		uint32_t distance =
@@ -634,17 +641,16 @@ uint8_t findClosestPaletteIndexRGBA(uint8_t *color, MI_RGN_PaletteTable_t *palet
 	uint8_t g = *(color + 1);
 	uint8_t b = *(color + 2);
 	uint8_t a = *(color + 3);
-	if (a < 64)	   // transparency treshold, was 128
-		return 15; // transparent
-	else if (r > 77)
-		bestIndex = 0;
-	else
-		bestIndex = 0;
+	if (a < 64)
+		return 15; // I4 index 15 is reserved for transparency.
 
-	if (a > 2 && a < 200)
-		a++;
-
-	for (uint8_t i = 1; i < 18; ++i) { // only 16 searched
+	/*
+	 * I4 pixels can encode only palette indices 0..15. Index 0 is reserved
+	 * by SigmaStar, and index 15 is transparent, so only 1..14 are valid
+	 * candidates for opaque colors. Returning 16 or 17 wraps when packed
+	 * into a nibble and produces unrelated colors on screen.
+	 */
+	for (uint8_t i = 1; i < 15; ++i) {
 		MI_RGN_PaletteElement_t *element = &paletteTable->astElement[i];
 		uint32_t distance =
 			colorDistance8(r, g, b, element->u8Red, element->u8Green, element->u8Blue);
@@ -1056,9 +1062,6 @@ void convertBitmap1555ToI4x86(uint16_t *srcBitmap, uint32_t width, uint32_t heig
 
 			if (paletteIndex == 0)	// Sigmastar reserver
 				paletteIndex = 8;	// black
-			if (paletteIndex == 17) // Transparent color
-				paletteIndex = 15;
-
 			// Calculate the destination byte and bit position
 			uint32_t destByteIndex = destOffset + x / 2;
 			if (x % 2 == 0) {
@@ -1172,7 +1175,7 @@ void setPixelI4(
 // elsewhere
 void convertRGBAToI4(uint8_t *srcBitmap, uint32_t width, uint32_t height, uint8_t *destBitmap,
 	MI_RGN_PaletteTable_t *paletteTable) {
-	unsigned char u8Value = 0;
+	uint8_t packedValue = 0;
 	int u32Stride = getRowStride(width, 4);
 
 	printf("I4 %d:%d Stride:%d\n", width, height, u32Stride);
@@ -1181,15 +1184,6 @@ void convertRGBAToI4(uint8_t *srcBitmap, uint32_t width, uint32_t height, uint8_
 		for (int32_t u32X = 0; u32X < width; ++u32X) {
 			uint32_t srcIndex =
 				(u32Y * width + u32X) * 4; // Calculate the source index (4 bytes per pixel)
-
-			// Extract RGBA values
-			uint8_t r = srcBitmap[srcIndex + 0];
-			uint8_t g = srcBitmap[srcIndex + 1];
-			uint8_t b = srcBitmap[srcIndex + 2];
-			uint8_t a = srcBitmap[srcIndex + 3];
-
-			if (a != 0 && r > 0)
-				u8Value = 0;
 
 			// Find the closest palette index for the RGBA color
 			// uint8_t paletteIndex = findClosestPaletteIndex8(r, g, b, a,
@@ -1209,10 +1203,10 @@ void convertRGBAToI4(uint8_t *srcBitmap, uint32_t width, uint32_t height, uint8_
 	#else
 			if (u32X % 2 == 0) { // Other platforms (non-SigmaStar)
 	#endif
-				u8Value = (*(destBitmap + (u32Stride * u32Y) + u32X / 2) & 0x0F)
+				packedValue = (*(destBitmap + (u32Stride * u32Y) + u32X / 2) & 0x0F)
 	|
 	((paletteIndex & 0x0F) << 4);
-				*(destBitmap + (u32Stride * u32Y) + u32X / 2) = u8Value;
+				*(destBitmap + (u32Stride * u32Y) + u32X / 2) = packedValue;
 			} else {
 				u8Value = (*(destBitmap + (u32Stride * u32Y) + u32X / 2) & 0xF0)
 	| (paletteIndex & 0x0F);
